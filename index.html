@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Personalizadas Brasil | Transformamos suas ideias em marcas</title>
+<meta name="description" content="Camisetas, sacolas, faixas e xícaras personalizadas. Transformamos suas ideias em marcas que se destacam." />
+<meta name="theme-color" content="#0a0a0a" />
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="https://api.iconify.design/mdi/tshirt-crew.svg?color=%23f5b400" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Firebase (compat, simples de usar via CDN) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800;900&display=swap');
+  :root{
+    --bg:#0a0a0a;
+    --bg-soft:#131313;
+    --card:#161513;
+    --card-border:#2a2620;
+    --gold:#f5b400;
+    --gold-2:#ffd668;
+    --gold-dim:#9c7a1f;
+    --text:#f4f1ea;
+    --text-dim:#9a968c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; overflow-x:hidden;}
+  .font-display{font-family:'Archivo Black','Inter',sans-serif;}
+  ::-webkit-scrollbar{display:none;}
+  * {scrollbar-width:none;}
+
+  .app-shell{max-width:480px; margin:0 auto; min-height:100dvh; position:relative; background:
+    radial-gradient(ellipse 600px 300px at 50% -10%, rgba(245,180,0,0.10), transparent 60%),
+    var(--bg);
+  }
+  .gold-grad{ background: linear-gradient(90deg, var(--gold-2), var(--gold) 60%, #c98f00); }
+  .gold-text{
+    background: linear-gradient(180deg, var(--gold-2), var(--gold) 70%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .glass-card{
+    background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
+    border:1px solid var(--card-border);
+    backdrop-filter: blur(6px);
+  }
+  .btn-gold{
+    background: linear-gradient(180deg, var(--gold-2), var(--gold));
+    color:#151100; font-weight:800;
+    box-shadow: 0 6px 24px -6px rgba(245,180,0,0.55), inset 0 1px 0 rgba(255,255,255,0.4);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .btn-gold:active{ transform: scale(0.97); }
+  .btn-ghost{
+    background: rgba(255,255,255,0.03); border:1px solid rgba(245,180,0,0.35); color:var(--gold-2);
+  }
+  .tab-active{ color: var(--gold); }
+  .tab-active .tab-dot{ opacity:1; transform: translateY(0) scale(1); }
+  .tab-dot{ opacity:0; transform: translateY(4px) scale(0.5); transition: all .25s ease; }
+  .stagger > *{ animation: rise .5s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes rise{ from{opacity:0; transform: translateY(14px);} to{opacity:1; transform:none;} }
+  .shine{
+    position:relative; overflow:hidden;
+  }
+  .shine::after{
+    content:""; position:absolute; inset:0;
+    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.18) 45%, transparent 55%);
+    transform: translateX(-120%);
+    animation: sweep 3.2s ease-in-out infinite;
+  }
+  @keyframes sweep{ 0%,60%{transform:translateX(-120%);} 100%{transform:translateX(120%);} }
+  .empty-slot{
+    border:1.5px dashed rgba(245,180,0,0.3); background: rgba(245,180,0,0.03);
+    color: var(--gold-dim);
+  }
+  .scroll-row{ display:flex; overflow-x:auto; scroll-snap-type:x mandatory; gap:0.75rem; }
+  .scroll-row > *{ scroll-snap-align:start; flex-shrink:0; }
+  .safe-bottom{ padding-bottom: env(safe-area-inset-bottom); }
+  .page-transition{ animation: fadeSlide .35s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes fadeSlide{ from{opacity:0; transform: translateY(10px);} to{opacity:1; transform:none;} }
+  .brand-shape{ clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react,env">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ============ CONFIG ============
+   >>> IMPORTANTE (Isaias): cole aqui as credenciais do SEU projeto Firebase.
+   Crie um projeto grátis em https://console.firebase.google.com
+   Ative "Firestore Database" (modo produção) e cole a config abaixo.
+   Esse MESMO objeto deve ser colado também no admin.html.
+*/
+const firebaseConfig = {
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI.firebaseapp.com",
+  projectId: "COLE_AQUI",
+  storageBucket: "COLE_AQUI.appspot.com",
+  messagingSenderId: "COLE_AQUI",
+  appId: "COLE_AQUI"
+};
+
+const WHATSAPP_NUMBER = "5511983296441"; // (11) 98329-6441
+const waLink = (msg) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+
+let db = null;
+let firebaseReady = false;
+try {
+  if (firebaseConfig.apiKey !== "COLE_AQUI") {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseReady = true;
+  }
+} catch (e) { console.warn("Firebase não configurado ainda:", e); }
+
+/* ============ DADOS PADRÃO (usados até você configurar o Firebase / preencher o painel admin) ============ */
+const DEFAULT_CONFIG = {
+  tagline: "Transformamos suas ideias em marcas que se destacam.",
+  heroImageUrl: "",
+  logoUrl: "",
+  whatsapp: "(11) 98329-6441",
+  instagram: "@personalizadasbrasil",
+  email: "contato@personalizadasbrasil.com.br",
+  address: "São Paulo - SP · Atendemos todo o Brasil",
+  hours: "Seg a Sáb · 9h às 19h",
+};
+
+const DEFAULT_PRODUCTS = [
+  { id:"camisetas", name:"Camisetas Personalizadas", icon:"mdi:tshirt-crew", desc:"Qualidade, conforto e estilo para sua marca.", imageUrl:"" },
+  { id:"sacolas", name:"Sacolas Plásticas Personalizadas", icon:"mdi:shopping-outline", desc:"Divulgue sua marca com praticidade e resistência.", imageUrl:"" },
+  { id:"faixas", name:"Faixas de Lona", icon:"mdi:image-frame", desc:"Destaque sua mensagem em qualquer lugar.", imageUrl:"" },
+  { id:"xicaras", name:"Xícaras Personalizadas", icon:"mdi:coffee-outline", desc:"Presentes, empresas e momentos especiais.", imageUrl:"" },
+];
+
+const CATS = [
+  { id:"camisetas", label:"Camisetas", icon:"mdi:tshirt-crew" },
+  { id:"sacolas", label:"Sacolas", icon:"mdi:shopping-outline" },
+  { id:"faixas", label:"Faixas", icon:"mdi:image-frame" },
+  { id:"xicaras", label:"Xícaras", icon:"mdi:coffee-outline" },
+];
+
+function Icon({name, className, size=22}){
+  return <img src={`https://api.iconify.design/${name}.svg?color=%23f5b400`} className={className} style={{width:size,height:size}} alt="" />;
+}
+function IconWhite({name, className, size=22}){
+  return <img src={`https://api.iconify.design/${name}.svg?color=%23f4f1ea`} className={className} style={{width:size,height:size}} alt="" />;
+}
+
+/* ============ FIRESTORE HOOK ============ */
+function useCollection(name, fallback){
+  const [data, setData] = useState(fallback);
+  const [loaded, setLoaded] = useState(!firebaseReady);
+  useEffect(()=>{
+    if(!firebaseReady) return;
+    const unsub = db.collection(name).orderBy("order","asc").onSnapshot(snap=>{
+      if(snap.empty){ setData(fallback); } else {
+        setData(snap.docs.map(d=>({id:d.id, ...d.data()})));
+      }
+      setLoaded(true);
+    }, err=>{ console.warn(name, err); setLoaded(true); });
+    return unsub;
+  },[name]);
+  return [data, loaded];
+}
+function useDoc(path, fallback){
+  const [data, setData] = useState(fallback);
+  useEffect(()=>{
+    if(!firebaseReady) return;
+    const unsub = db.doc(path).onSnapshot(snap=>{
+      if(snap.exists) setData({...fallback, ...snap.data()});
+    }, err=>console.warn(path, err));
+    return unsub;
+  },[path]);
+  return data;
+}
+
+/* ============ EMPTY SLOT ============ */
+function EmptySlot({label="Em breve", icon="mdi:image-plus-outline", h="h-28"}){
+  return (
+    <div className={`empty-slot ${h} rounded-2xl flex flex-col items-center justify-center gap-1.5 text-center px-2`}>
+      <Icon name={icon} size={22} />
+      <span className="text-[11px] font-semibold tracking-wide">{label}</span>
+    </div>
+  );
+}
+
+/* ============ HEADER ============ */
+function Header({onMenu, title}){
+  return (
+    <div className="sticky top-0 z-30 backdrop-blur-md bg-black/70 border-b border-white/5">
+      <div className="flex items-center justify-between px-4 h-14">
+        <button onClick={onMenu} className="w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10">
+          <IconWhite name="mdi:menu" size={24} />
+        </button>
+        {title
+          ? <span className="font-display text-xs tracking-[0.15em] gold-text uppercase">{title}</span>
+          : (
+            <div className="flex items-center gap-2">
+              <Icon name="mdi:tshirt-crew" size={18} />
+              <span className="font-display text-[13px] tracking-wide">PERSONALIZADAS <span className="gold-text">BRASIL</span></span>
+            </div>
+          )}
+        <a href={waLink("Olá! Quero fazer um orçamento com a Personalizadas Brasil.")} target="_blank" className="w-9 h-9 flex items-center justify-center rounded-full bg-[#25D366]/15 active:scale-90 transition">
+          <Icon name="mdi:whatsapp" size={20} className="opacity-0" />
+          <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%2325D366" style={{width:20,height:20}} />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/* ============ BOTTOM NAV ============ */
+const NAV = [
+  { id:"inicio", label:"Início", icon:"mdi:home-variant" },
+  { id:"produtos", label:"Produtos", icon:"mdi:tshirt-crew-outline" },
+  { id:"trabalhos", label:"Trabalhos", icon:"mdi:image-multiple-outline" },
+  { id:"clientes", label:"Clientes", icon:"mdi:account-group-outline" },
+  { id:"contato", label:"Contato", icon:"mdi:message-text-outline" },
+];
+function BottomNav({page, setPage}){
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-40">
+      <div className="max-w-[480px] mx-auto safe-bottom bg-black/85 backdrop-blur-md border-t border-white/5">
+        <div className="grid grid-cols-5">
+          {NAV.map(n=>(
+            <button key={n.id} onClick={()=>setPage(n.id)}
+              className={`flex flex-col items-center gap-1 py-2.5 ${page===n.id?'tab-active':'text-white/50'}`}>
+              <img src={`https://api.iconify.design/${n.icon}.svg?color=${page===n.id?'%23f5b400':'%238a8578'}`} style={{width:21,height:21}} />
+              <span className="text-[10px] font-semibold">{n.label}</span>
+              <span className="tab-dot w-1 h-1 rounded-full bg-[var(--gold)]"></span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ SIDE MENU ============ */
+function SideMenu({open, onClose, setPage, cfg}){
+  const items = [
+    {id:"inicio", label:"Início", icon:"mdi:home-variant"},
+    {id:"produtos", label:"Produtos", icon:"mdi:tshirt-crew-outline"},
+    {id:"trabalhos", label:"Trabalhos Realizados", icon:"mdi:image-multiple-outline"},
+    {id:"clientes", label:"Nossos Clientes", icon:"mdi:account-group-outline"},
+    {id:"videos", label:"Vídeos", icon:"mdi:play-circle-outline"},
+    {id:"promocao", label:"Promoção do Mês", icon:"mdi:fire"},
+    {id:"contato", label:"Contato", icon:"mdi:message-text-outline"},
+  ];
+  return (
+    <>
+      <div onClick={onClose} className={`fixed inset-0 bg-black/60 z-50 transition-opacity ${open?'opacity-100':'opacity-0 pointer-events-none'}`}/>
+      <div className={`fixed top-0 left-0 bottom-0 w-[78%] max-w-[320px] z-50 bg-[#0d0c0a] border-r border-white/10 transition-transform duration-300 ${open?'translate-x-0':'-translate-x-full'} flex flex-col`}>
+        <div className="p-6 border-b border-white/10 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full gold-grad flex items-center justify-center shine">
+            <IconWhite name="mdi:tshirt-crew" size={26} />
+          </div>
+          <div>
+            <div className="font-display text-sm">PERSONALIZADAS<br/><span className="gold-text">BRASIL</span></div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto py-3">
+          {items.map(it=>(
+            <button key={it.id} onClick={()=>{setPage(it.id); onClose();}}
+              className="w-full flex items-center gap-3 px-6 py-3.5 active:bg-white/5 text-left">
+              <Icon name={it.icon} size={19}/>
+              <span className="text-[14px] font-medium">{it.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="p-5 border-t border-white/10">
+          <a href={waLink("Olá! Quero fazer um orçamento.")} target="_blank" className="btn-gold w-full rounded-xl py-3 flex items-center justify-center gap-2 text-sm">
+            <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%23151100" style={{width:18,height:18}}/>
+            Fale Conosco
+          </a>
+          <p className="text-center text-[11px] text-white/40 mt-2">Atendimento rápido e personalizado</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ============ SECTION HEADER ============ */
+function SectionHeader({icon, title, accent, action, onAction}){
+  return (
+    <div className="flex items-center justify-between mb-3 px-1">
+      <div className="flex items-center gap-2">
+        <Icon name={icon} size={19}/>
+        <h2 className="font-display text-[15px] tracking-wide">{title} {accent && <span className="gold-text">{accent}</span>}</h2>
+      </div>
+      {action && <button onClick={onAction} className="text-[11px] font-semibold text-white/50 border border-white/15 rounded-full px-3 py-1">{action}</button>}
+    </div>
+  );
+}
+
+/* ============ HOME PAGE ============ */
+function HomePage({cfg, products, promo, setPage}){
+  return (
+    <div className="page-transition px-4 pt-5 pb-10 stagger">
+      {/* Hero */}
+      <div className="relative rounded-3xl overflow-hidden glass-card p-6 mb-6">
+        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[var(--gold)]/10 blur-3xl"></div>
+        <div className="relative flex flex-col items-start">
+          <div className="w-14 h-14 rounded-2xl gold-grad flex items-center justify-center mb-4 shine">
+            <IconWhite name="mdi:tshirt-crew" size={30}/>
+          </div>
+          <p className="text-[11px] tracking-[0.2em] text-[var(--gold)] font-bold mb-1">CRIAMOS · PERSONALIZAMOS · REALIZAMOS</p>
+          <h1 className="font-display text-[26px] leading-[1.15] mb-3">
+            SUA <span className="gold-text">ARTE</span><br/>AQUI!
+          </h1>
+          <p className="text-[13.5px] text-white/70 leading-relaxed mb-5">{cfg.tagline}</p>
+          <div className="flex flex-col gap-2.5 w-full">
+            <a href={waLink("Olá! Quero fazer um orçamento com a Personalizadas Brasil.")} target="_blank"
+              className="btn-gold rounded-xl py-3.5 flex items-center justify-center gap-2 text-[14px]">
+              <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%23151100" style={{width:19,height:19}}/>
+              Fazer Orçamento
+            </a>
+            <button onClick={()=>setPage('trabalhos')} className="btn-ghost rounded-xl py-3.5 flex items-center justify-center gap-2 text-[14px] font-semibold">
+              <Icon name="mdi:play-circle-outline" size={19}/>
+              Conheça Nosso Trabalho
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Diferenciais */}
+      <div className="grid grid-cols-4 gap-2 mb-7">
+        {[["mdi:palette-swatch-outline","Cores Vibrantes"],["mdi:printer-outline","Alta Qualidade"],["mdi:shield-check-outline","Material Resistente"],["mdi:truck-fast-outline","Entrega Nacional"]].map(([ic,label],i)=>(
+          <div key={i} className="glass-card rounded-2xl py-3 px-1.5 flex flex-col items-center gap-1.5 text-center">
+            <Icon name={ic} size={20}/>
+            <span className="text-[9.5px] font-semibold text-white/70 leading-tight">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Produtos */}
+      <SectionHeader icon="mdi:tshirt-crew-outline" title="Nossos" accent="Produtos" action="Ver todos" onAction={()=>setPage('produtos')} />
+      <div className="grid grid-cols-2 gap-3 mb-7">
+        {products.map(p=>(
+          <div key={p.id} className="glass-card rounded-2xl overflow-hidden">
+            <div className="h-24 bg-black/40 flex items-center justify-center">
+              {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full object-cover"/> : <Icon name="mdi:image-outline" size={26}/>}
+            </div>
+            <div className="p-2.5">
+              <p className="text-[11.5px] font-bold leading-tight">{p.name}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Promoção */}
+      {promo && promo.active !== false && (promo.title || promo.imageUrl) && (
+        <div className="mb-7">
+          <div className="relative rounded-2xl overflow-hidden glass-card p-4 border-[var(--gold)]/40">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🔥</span>
+              <span className="font-display text-xs gold-text tracking-wide">PROMOÇÃO DO MÊS</span>
+            </div>
+            {promo.imageUrl && <img src={promo.imageUrl} className="w-full h-32 object-cover rounded-xl mb-3"/>}
+            <p className="font-bold text-[14px] mb-1">{promo.title || "Ofertas especiais todos os meses!"}</p>
+            {promo.description && <p className="text-[12.5px] text-white/60 mb-2">{promo.description}</p>}
+            <div className="flex items-center justify-between">
+              {promo.price && <span className="text-[var(--gold)] font-display text-sm">{promo.price}</span>}
+              <a href={waLink(`Olá! Vi a promoção "${promo.title||''}" e quero aproveitar.`)} target="_blank" className="btn-gold text-[11px] font-bold px-4 py-2 rounded-full">Aproveitar</a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CTA final */}
+      <div className="rounded-2xl overflow-hidden relative">
+        <div className="gold-grad p-5 flex items-center justify-between shine">
+          <div>
+            <p className="font-display text-[15px] text-black leading-tight">VAMOS TRANSFORMAR<br/>SUA IDEIA EM REALIDADE!</p>
+          </div>
+          <a href={waLink("Olá! Quero transformar minha ideia em realidade.")} target="_blank" className="w-11 h-11 bg-black rounded-full flex items-center justify-center flex-shrink-0 ml-3">
+            <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%2325D366" style={{width:22,height:22}}/>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ PRODUTOS PAGE ============ */
+function ProdutosPage({products}){
+  return (
+    <div className="page-transition px-4 pt-5 pb-10 stagger">
+      <h1 className="font-display text-xl mb-1">Nossos <span className="gold-text">Produtos</span></h1>
+      <p className="text-[13px] text-white/50 mb-5">Qualidade e criatividade em cada detalhe.</p>
+      <div className="space-y-4">
+        {products.map(p=>(
+          <div key={p.id} className="glass-card rounded-2xl overflow-hidden">
+            <div className="h-40 bg-black/40 relative">
+              {p.imageUrl
+                ? <img src={p.imageUrl} className="w-full h-full object-cover"/>
+                : <EmptySlot label="Adicione uma foto" icon="mdi:image-plus-outline" h="h-40 rounded-none"/>}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                <p className="font-display text-[13px]">{p.name}</p>
+              </div>
+            </div>
+            <div className="p-4">
+              <p className="text-[13px] text-white/70 mb-3">{p.desc}</p>
+              <a href={waLink(`Olá! Tenho interesse em: ${p.name}`)} target="_blank" className="btn-gold w-full rounded-lg py-2.5 flex items-center justify-center gap-2 text-[12.5px]">
+                <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%23151100" style={{width:15,height:15}}/>
+                Quero orçar {p.name.split(" ")[0]}
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============ TRABALHOS PAGE ============ */
+function TrabalhosPage({works}){
+  const [cat, setCat] = useState("todos");
+  const filtered = cat==="todos" ? works : works.filter(w=>w.category===cat);
+  return (
+    <div className="page-transition px-4 pt-5 pb-10">
+      <h1 className="font-display text-xl mb-1">Trabalhos <span className="gold-text">Realizados</span></h1>
+      <p className="text-[13px] text-white/50 mb-4">Confira alguns projetos que já entregamos.</p>
+      <div className="scroll-row mb-5 pb-1">
+        <button onClick={()=>setCat("todos")} className={`px-3.5 py-1.5 rounded-full text-[11.5px] font-bold border ${cat==='todos'?'gold-grad text-black border-transparent':'border-white/15 text-white/60'}`}>Todos</button>
+        {CATS.map(c=>(
+          <button key={c.id} onClick={()=>setCat(c.id)} className={`px-3.5 py-1.5 rounded-full text-[11.5px] font-bold border flex items-center gap-1 ${cat===c.id?'gold-grad text-black border-transparent':'border-white/15 text-white/60'}`}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+      {filtered.length===0 ? (
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({length:6}).map((_,i)=><EmptySlot key={i} label="Adicione sua imagem" h="h-32"/>)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {filtered.map(w=>(
+            <div key={w.id} className="glass-card rounded-2xl overflow-hidden">
+              <div className="h-28 bg-black/40">
+                {w.imageUrl ? <img src={w.imageUrl} className="w-full h-full object-cover"/> : <EmptySlot h="h-28 rounded-none" label="Sem foto"/>}
+              </div>
+              <div className="p-2.5">
+                <p className="text-[11px] font-bold leading-tight">{w.clientName}</p>
+                <p className="text-[10px] text-white/50">{w.productName}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <a href={waLink("Olá! Vi os trabalhos de vocês e quero um projeto assim.")} target="_blank" className="btn-gold w-full rounded-xl py-3.5 flex items-center justify-center gap-2 text-[13.5px] mt-6">
+        <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%23151100" style={{width:17,height:17}}/>
+        Quero um projeto assim
+      </a>
+    </div>
+  );
+}
+
+/* ============ CLIENTES PAGE ============ */
+function ClientesPage({clients}){
+  const [cat, setCat] = useState("todos");
+  const filtered = cat==="todos" ? clients : clients.filter(c=>c.category===cat);
+  return (
+    <div className="page-transition px-4 pt-5 pb-10">
+      <h1 className="font-display text-xl mb-1">Nossos <span className="gold-text">Clientes</span></h1>
+      <p className="text-[13px] text-white/50 mb-4">Marcas que confiam no nosso trabalho.</p>
+      <div className="scroll-row mb-5 pb-1">
+        <button onClick={()=>setCat("todos")} className={`px-3.5 py-1.5 rounded-full text-[11.5px] font-bold border ${cat==='todos'?'gold-grad text-black border-transparent':'border-white/15 text-white/60'}`}>Todos</button>
+        {CATS.map(c=>(
+          <button key={c.id} onClick={()=>setCat(c.id)} className={`px-3.5 py-1.5 rounded-full text-[11.5px] font-bold border ${cat===c.id?'gold-grad text-black border-transparent':'border-white/15 text-white/60'}`}>{c.label}</button>
+        ))}
+      </div>
+
+      {filtered.length===0 ? (
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          {Array.from({length:4}).map((_,i)=>(
+            <div key={i} className="glass-card rounded-2xl p-3">
+              <EmptySlot h="h-20" label="Foto do cliente" />
+              <p className="text-[11px] font-bold mt-2">Nome do Cliente</p>
+              <p className="text-[10px] text-white/40">Produto realizado</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          {filtered.map(c=>(
+            <div key={c.id} className="glass-card rounded-2xl overflow-hidden">
+              <div className="h-24 bg-black/40">
+                {c.photoUrl ? <img src={c.photoUrl} className="w-full h-full object-cover"/> : <EmptySlot h="h-24 rounded-none" label="Sem foto"/>}
+              </div>
+              <div className="p-2.5">
+                <p className="text-[11px] font-bold leading-tight">{c.companyName}</p>
+                <p className="text-[10px] text-white/50">{c.product}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <SectionHeader icon="mdi:star-outline" title="Depoimentos" />
+      <div className="space-y-3 mb-6">
+        {(filtered.filter(c=>c.testimonial).length? filtered.filter(c=>c.testimonial): [null,null,null]).slice(0,3).map((c,i)=>(
+          <div key={i} className="glass-card rounded-2xl p-4">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+                {c?.photoUrl ? <img src={c.photoUrl} className="w-full h-full object-cover"/> : <Icon name="mdi:account" size={18}/>}
+              </div>
+              <div>
+                <p className="text-[12px] font-bold">{c?.companyName || "Nome do Cliente"}</p>
+                <div className="flex gap-0.5">{Array.from({length:5}).map((_,s)=><span key={s} className="text-[10px] text-[var(--gold)]">★</span>)}</div>
+              </div>
+            </div>
+            <p className="text-[12.5px] text-white/60 italic">"{c?.testimonial || "Digite aqui o depoimento do seu cliente. Conte como foi a experiência."}"</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="glass-card rounded-2xl p-5 text-center border-[var(--gold)]/30">
+        <p className="font-display text-[14px] mb-1">SUA MARCA <span className="gold-text">TAMBÉM PODE ESTAR AQUI</span></p>
+        <p className="text-[12px] text-white/50 mb-3">Junte-se aos nossos clientes satisfeitos.</p>
+        <a href={waLink("Olá! Quero fazer parte dos clientes da Personalizadas Brasil.")} target="_blank" className="btn-gold rounded-full px-5 py-2.5 inline-flex items-center gap-2 text-[12.5px]">
+          <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%23151100" style={{width:15,height:15}}/>
+          Faça seu orçamento
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/* ============ VIDEOS PAGE ============ */
+function VideosPage({videos}){
+  return (
+    <div className="page-transition px-4 pt-5 pb-10 stagger">
+      <h1 className="font-display text-xl mb-1">Nossos <span className="gold-text">Vídeos</span></h1>
+      <p className="text-[13px] text-white/50 mb-5">Produção, impressão e entrega em ação.</p>
+      <div className="space-y-3">
+        {(videos.length? videos : Array.from({length:4}).map((_,i)=>({id:i}))).map(v=>(
+          <div key={v.id} className="glass-card rounded-2xl overflow-hidden">
+            {v.url ? (
+              <video controls className="w-full h-48 object-cover bg-black" poster={v.thumbnailUrl||""}>
+                <source src={v.url} />
+              </video>
+            ) : (
+              <div className="h-40 flex flex-col items-center justify-center gap-2 empty-slot rounded-none">
+                <Icon name="mdi:play-circle-outline" size={30}/>
+                <span className="text-[11px] font-semibold">Adicione seu vídeo</span>
+              </div>
+            )}
+            {v.title && <div className="p-3"><p className="text-[12.5px] font-bold">{v.title}</p></div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============ PROMOÇÃO PAGE ============ */
+function PromocaoPage({promo}){
+  return (
+    <div className="page-transition px-4 pt-5 pb-10 stagger">
+      <div className="flex items-center gap-2 mb-1"><span className="text-xl">🔥</span><h1 className="font-display text-xl">Promoção <span className="gold-text">do Mês</span></h1></div>
+      <p className="text-[13px] text-white/50 mb-5">Ofertas especiais todos os meses!</p>
+      <div className="glass-card rounded-3xl overflow-hidden border-[var(--gold)]/40">
+        {promo?.imageUrl
+          ? <img src={promo.imageUrl} className="w-full h-52 object-cover"/>
+          : <EmptySlot h="h-48 rounded-none" label="Imagem da promoção"/>}
+        <div className="p-5">
+          <p className="font-display text-[17px] mb-2">{promo?.title || "Confira agora e aproveite!"}</p>
+          <p className="text-[13px] text-white/60 mb-4">{promo?.description || "Digite aqui a descrição da promoção do mês."}</p>
+          <div className="flex items-center justify-between mb-4">
+            {promo?.price && <span className="gold-text font-display text-lg">{promo.price}</span>}
+            {promo?.deadline && <span className="text-[11px] text-white/40">Até {promo.deadline}</span>}
+          </div>
+          <a href={waLink(`Olá! Quero aproveitar a promoção do mês: ${promo?.title||''}`)} target="_blank" className="btn-gold w-full rounded-xl py-3.5 flex items-center justify-center gap-2 text-[13.5px]">
+            <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%23151100" style={{width:17,height:17}}/>
+            Confira agora e aproveite
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ CONTATO PAGE ============ */
+function ContatoPage({cfg}){
+  const rows = [
+    {icon:"mdi:whatsapp", label:cfg.whatsapp, sub:"Fale conosco pelo WhatsApp", href:waLink("Olá! Quero fazer um orçamento.")},
+    {icon:"mdi:instagram", label:cfg.instagram, sub:"Acompanhe nossos trabalhos", href:`https://instagram.com/${(cfg.instagram||'').replace('@','')}`},
+    {icon:"mdi:email-outline", label:cfg.email, sub:"Envie um e-mail", href:`mailto:${cfg.email}`},
+    {icon:"mdi:map-marker-outline", label:cfg.address, sub:cfg.hours, href:"#"},
+  ];
+  return (
+    <div className="page-transition px-4 pt-5 pb-10 stagger">
+      <h1 className="font-display text-xl mb-1">Entre em <span className="gold-text">Contato</span></h1>
+      <p className="text-[13px] text-white/50 mb-5">É rápido, fácil e sem compromisso.</p>
+      <div className="space-y-3 mb-6">
+        {rows.map((r,i)=>(
+          <a key={i} href={r.href} target="_blank" className="glass-card rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[var(--gold)]/10 flex items-center justify-center flex-shrink-0">
+              <Icon name={r.icon} size={19}/>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold truncate">{r.label}</p>
+              <p className="text-[11px] text-white/45">{r.sub}</p>
+            </div>
+          </a>
+        ))}
+      </div>
+      <a href={waLink("Olá! Quero fazer um orçamento com a Personalizadas Brasil.")} target="_blank" className="rounded-2xl overflow-hidden block relative shine">
+        <div className="gold-grad p-5 flex items-center gap-3 justify-center">
+          <img src="https://api.iconify.design/mdi/whatsapp.svg?color=%23151100" style={{width:22,height:22}}/>
+          <span className="font-display text-black text-sm">FAÇA SEU ORÇAMENTO AGORA</span>
+        </div>
+      </a>
+    </div>
+  );
+}
+
+/* ============ APP ROOT ============ */
+function App(){
+  const [page, setPage] = useState("inicio");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const cfg = useDoc("config/site", DEFAULT_CONFIG);
+  const promo = useDoc("config/promotion", {});
+  const [products] = useCollection("products", DEFAULT_PRODUCTS);
+  const [works] = useCollection("works", []);
+  const [clients] = useCollection("clients", []);
+  const [videos] = useCollection("videos", []);
+
+  useEffect(()=>{ window.scrollTo(0,0); }, [page]);
+
+  const titleMap = {produtos:"Produtos", trabalhos:"Trabalhos", clientes:"Clientes", videos:"Vídeos", contato:"Contato", promocao:"Promoção"};
+
+  return (
+    <div className="app-shell">
+      <Header onMenu={()=>setMenuOpen(true)} title={titleMap[page]} />
+      <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} setPage={setPage} cfg={cfg} />
+
+      {page==="inicio" && <HomePage cfg={cfg} products={products} promo={promo} setPage={setPage} />}
+      {page==="produtos" && <ProdutosPage products={products} />}
+      {page==="trabalhos" && <TrabalhosPage works={works} />}
+      {page==="clientes" && <ClientesPage clients={clients} />}
+      {page==="videos" && <VideosPage videos={videos} />}
+      {page==="promocao" && <PromocaoPage promo={promo} />}
+      {page==="contato" && <ContatoPage cfg={cfg} />}
+
+      <div className="h-20" />
+      <BottomNav page={page} setPage={setPage} />
+
+      {!firebaseReady && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-red-900/90 border border-red-500/40 text-red-100 text-[10.5px] px-3 py-1.5 rounded-full max-w-[90%] text-center">
+          ⚠ Firebase não configurado — conteúdo em modo demonstração
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
